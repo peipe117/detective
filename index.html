@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>華語小偵探：生字躲貓貓</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Nunito"', '"Microsoft JhengHei"', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Nunito', 'Microsoft JhengHei', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+        }
+        /* Custom Scrollbar for the word list */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9; 
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+        
+        /* Utility classes that Tailwind might miss in the standalone version or custom animations */
+        .animate-bounce {
+            animation: bounce 1s infinite;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(-25%) translateX(-50%); animation-timing-function: cubic-bezier(0.8,0,1,1); }
+            50% { transform: none translateX(-50%); animation-timing-function: cubic-bezier(0,0,0.2,1); }
+        }
+        .animate-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback, useMemo, useRef } = React;
+
+        // --- 完美修復版：Mock Lucide Icons for Standalone React ---
+        // 透過 span 包覆，確保 React 狀態更新時不會因為 SVG 被替換而報錯，並保證圖示穩定顯示。
+        const Icon = ({ name, className, ...props }) => {
+            const containerRef = useRef(null);
+            
+            useEffect(() => {
+                if (containerRef.current && window.lucide) {
+                    // 動態植入 i 標籤讓 lucide 進行替換
+                    containerRef.current.innerHTML = `<i data-lucide="${name}" class="${className || ''}"></i>`;
+                    window.lucide.createIcons({
+                        root: containerRef.current
+                    });
+                }
+            }, [name, className]);
+
+            return <span ref={containerRef} className="inline-flex items-center justify-center" {...props}></span>;
+        };
+
+        const SearchIcon = (props) => <Icon name="search" {...props} />;
+        const ZoomInIcon = (props) => <Icon name="zoom-in" {...props} />;
+        const GridIcon = (props) => <Icon name="grid" {...props} />;
+        const Trash2Icon = (props) => <Icon name="trash-2" {...props} />;
+        const CheckCircleIcon = (props) => <Icon name="check-circle" {...props} />;
+        const XCircleIcon = (props) => <Icon name="x-circle" {...props} />;
+        const ChevronRightIcon = (props) => <Icon name="chevron-right" {...props} />;
+        const ChevronLeftIcon = (props) => <Icon name="chevron-left" {...props} />;
+        const TrophyIcon = (props) => <Icon name="trophy" {...props} />;
+        const SettingsIcon = (props) => <Icon name="settings" {...props} />;
+        const PlusIcon = (props) => <Icon name="plus" {...props} />;
+        const ArrowLeftIcon = (props) => <Icon name="arrow-left" {...props} />;
+        const BookOpenIcon = (props) => <Icon name="book-open" {...props} />;
+        const Edit3Icon = (props) => <Icon name="edit-3" {...props} />;
+        const PenToolIcon = (props) => <Icon name="pen-tool" {...props} />;
+        const TypeIcon = (props) => <Icon name="type" {...props} />;
+        const MenuIcon = (props) => <Icon name="menu" {...props} />;
+        const LightbulbIcon = (props) => <Icon name="lightbulb" {...props} />;
+        const EyeIcon = (props) => <Icon name="eye" {...props} />;
+        const EraserIcon = (props) => <Icon name="eraser" {...props} />;
+        const Volume2Icon = (props) => <Icon name="volume-2" {...props} />;
+        const VolumeXIcon = (props) => <Icon name="volume-x" {...props} />;
+        const MapIcon = (props) => <Icon name="map" {...props} />;
+        const MaximizeIcon = (props) => <Icon name="maximize" {...props} />;
+
+
+        // 將老師提供的 L01 - L12 原始生詞與「全部單一字」題庫完美合併，保證一字不漏！
+        const RAW_DATA = {
+        'L01': ['比較', '大家', '方友朋', '高興', '跟', '歡迎', '今年', '介紹', '自己', '看書', '認識', '現在', '新', '學', '游泳', '最', '中文', '張莉', '同', '自', '己', '年', '比'],
+        'L02': ['幫', '電腦公司', '工作', '上班', '外公', '外婆', '一樣', '以前', '銀行', '醫生', '做生意', '外', '公', '以', '前', '工', '作', '班', '後'],
+        'L03': ['冰淇淋', '超級市場', '東西', '附近', '可以', '米', '買', '牛肉', '巧克力', '青菜', '糖果', '要', '魚', '去', '近', '東', '西', '還', '可'],
+        'L04': ['出去', '蛋炒飯', '餓', '漢堡', '快點', '了', '麵', '薯條', '湯', '晚餐', '晚飯', '先', '已經', '玉米', '再', '週末', '出', '週', '末', '晚', '蛋', '飯', '現', '點'],
+        'L05': ['變', '不錯', '白色', '春天', '草', '紅色', '黃', '還是', '花', '了', '綠色', '漂亮', '秋天', '時候', '樹葉', '天氣', '院子', '顏色', '舒服', '綠', '色', '時', '候', '子', '紅', '白'],
+        'L06': ['拜年', '放鞭炮', '給', '紅包', '會', '每', '那天', '年糕', '如果', '說', '台灣', '貼春聯', '新年', '下', '星期', '華人', '農曆', '華', '對', '星', '期', '如', '果'],
+        'L07': ['別', '肥皂', '乾淨', '該', '過', '趕快', '來不及', '累', '起床', '刷牙', '睡覺', '晚上', '忘', '洗', '洗澡', '洗臉', '用', '知道', '昨天', '起', '早', '昨', '臉'],
+        'L08': ['不見了', '寵物', '帶', '非常', '狗', '可愛', '貓', '去年', '送給', '上個月', '牠們', '兔子', '餵', '養', '隻', '散步', '送', '散', '步', '非', '愛'],
+        'L09': ['北方', '東方', '方向', '告訴', '教室', '南方', '所以', '它', '校門口', '西方', '因為', '足球場', '指北針', '指南針', '還是', '南', '北', '裡', '校', '門', '口', '因', '為', '所'],
+        'L10': ['本來', '法國', '舅舅', '看', '旅行', '紐約', '臺北', '臺南', '退休', '一次', '住在', '暑假', '本', '住', '退', '休', '次', '旅', '行', '法', '國'],
+        'L11': ['不但', '脖子', '長頸鹿', '大象', '動物園', '猴子', '看到', '老虎', '胖', '企鵝', '玩', '熊貓', '希望', '這一次', '長', '真', '動', '物', '園', '老', '希', '望', '但'],
+        'L12': ['啊', '過來', '很久', '好好', '看起來', '沒問題', '上課', '說話', '瘦', '網路', '寫', '信', '有意思', '一定', '影像', '長高', '久', '話', '高', '課', '沒', '題', '定', '意', '思']
+        };
+
+        const INITIAL_VOCAB = [];
+        Object.entries(RAW_DATA).forEach(([level, words]) => {
+        const uniqueWords = Array.from(new Set(words.map(w => w.trim()))).filter(w => w);
+        uniqueWords.forEach(word => {
+            INITIAL_VOCAB.push({ 
+            id: Math.random().toString(36).substr(2, 9), 
+            word: word, 
+            level, 
+            type: word.length === 1 ? 'char' : 'word',
+            pinyin: '', 
+            english: '' 
+            });
+        });
+        });
+
+        // --- 音效系統 (Web Audio API) ---
+        let audioCtx = null;
+        const initAudio = () => {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+        };
+
+        const playTone = (frequency, type, duration, vol = 0.1, isMuted) => {
+        if (isMuted) return;
+        initAudio();
+        if (!audioCtx) return;
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.type = type;
+        oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(vol, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + duration);
+        };
+
+        const App = () => {
+        // 系統狀態
+        const [vocabList, setVocabList] = useState(INITIAL_VOCAB);
+        const [showEditor, setShowEditor] = useState(false);
+        const [activeTab, setActiveTab] = useState('bank'); // 'bank', 'treasure', 'custom'
+        const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+        const [isMuted, setIsMuted] = useState(false); 
+        
+        // 強制重置與選項洗牌的 Key
+        const [gameKey, setGameKey] = useState(0);
+        const [reshuffleKey, setReshuffleKey] = useState(0);
+
+        // 篩選狀態
+        const [playLevel, setPlayLevel] = useState('All'); 
+        const [playType, setPlayType] = useState('All');
+        
+        // 尋寶模式狀態 (散落的文字)
+        const [scatteredTargets, setScatteredTargets] = useState([]);
+        const [treasureFontSize, setTreasureFontSize] = useState(1); // 尋寶模式字體大小倍率
+
+        // 自訂題目
+        const [customTargetInput, setCustomTargetInput] = useState('');
+        const [customWrongsInput, setCustomWrongsInput] = useState(['', '', '']);
+        const [activeCustomQuestion, setActiveCustomQuestion] = useState(null);
+
+        // 遊戲核心狀態
+        const [currentIdx, setCurrentIdx] = useState(0);
+        const [mode, setMode] = useState('eraser'); 
+        const [mosaicDifficulty, setMosaicDifficulty] = useState('easy'); // 馬賽克難度
+        const [revealedBlocks, setRevealedBlocks] = useState([]);
+        const [zoomLevel, setZoomLevel] = useState(15);
+        const [blurLevel, setBlurLevel] = useState(40);
+        const [eraserSize, setEraserSize] = useState(60); 
+        const [gameState, setGameState] = useState('playing'); // playing, answered
+        const [options, setOptions] = useState([]);
+        const [wrongAttempts, setWrongAttempts] = useState([]);
+        const [score, setScore] = useState(0);
+
+        // 編輯器輸入
+        const [newWord, setNewWord] = useState('');
+        const [newLevel, setNewLevel] = useState('L01');
+
+        // Canvas 擦去遊戲使用 Ref
+        const canvasRef = useRef(null);
+        const isDrawingRef = useRef(false);
+
+        // 音效觸發函數
+        const playClick = useCallback(() => playTone(600, 'sine', 0.1, 0.05, isMuted), [isMuted]);
+        const playWrong = useCallback(() => {
+            playTone(300, 'sawtooth', 0.2, 0.1, isMuted);
+            setTimeout(() => playTone(250, 'sawtooth', 0.3, 0.1, isMuted), 150);
+        }, [isMuted]);
+        const playCorrect = useCallback(() => {
+            playTone(523.25, 'sine', 0.1, 0.1, isMuted); // C5
+            setTimeout(() => playTone(659.25, 'sine', 0.1, 0.1, isMuted), 100); // E5
+            setTimeout(() => playTone(783.99, 'sine', 0.2, 0.1, isMuted), 200); // G5
+            setTimeout(() => playTone(1046.50, 'sine', 0.4, 0.1, isMuted), 300); // C6
+        }, [isMuted]);
+
+        // 過濾題庫
+        const currentPlayList = useMemo(() => vocabList.filter(v => {
+            return (playLevel === 'All' || v.level === playLevel) && 
+                (playType === 'All' || v.type === playType);
+        }), [vocabList, playLevel, playType]);
+
+        const currentItem = activeTab === 'custom'
+            ? (activeCustomQuestion || { word: '請出題', pinyin: '自訂', english: '' })
+            : (currentPlayList.length > 0 ? currentPlayList[currentIdx % currentPlayList.length] : null);
+
+        const availableLevels = ['All', ...Array.from(new Set(vocabList.map(v => v.level))).sort()];
+
+        // 動態網格計算
+        const gridConfig = useMemo(() => {
+            let baseCols = 6, baseRows = 6;
+            
+            if (activeTab === 'treasure') {
+                baseCols = 12; baseRows = 8; // 尋寶模式基底 96 格
+            } else if (currentItem && currentItem.word !== '請出題') {
+                const len = currentItem.word.length;
+                if (len === 1) { baseCols = 6; baseRows = 6; } // 單字: 36格
+                else if (len === 2) { baseCols = 8; baseRows = 4; } // 雙字: 32格
+                else if (len === 3) { baseCols = 9; baseRows = 4; } // 三字: 36格
+                else { baseCols = 10; baseRows = 4; } // 四字以上: 40格
+            }
+            
+            let multiplier = 1;
+            if (mosaicDifficulty === 'medium') multiplier = 1.5;
+            if (mosaicDifficulty === 'hard') multiplier = 2;
+            
+            const finalCols = Math.round(baseCols * multiplier);
+            const finalRows = Math.round(baseRows * multiplier);
+            
+            return { cols: finalCols, rows: finalRows, total: finalCols * finalRows };
+        }, [currentItem, activeTab, mosaicDifficulty]);
+
+        // 產生尋寶模式的散落生字 (含防碰撞/不重疊演算法)
+        const generateScattered = useCallback((list) => {
+            if (!list || list.length === 0) return [];
+            
+            const targets = [];
+            const placed = []; 
+            const shuffledList = [...list].sort(() => 0.5 - Math.random());
+            const maxWords = Math.min(35, shuffledList.length); 
+            const colors = ['#1e293b', '#334155', '#475569', '#1e40af', '#16a34a', '#b45309', '#b91c1c', '#6d28d9', '#0f766e'];
+
+            for (let i = 0; i < maxWords; i++) {
+                const randomItem = shuffledList[i];
+                const wordLen = randomItem.word.length;
+                
+                const marginX = Math.min((4 + wordLen * 3) * treasureFontSize, 40);
+                const marginY = Math.min((4 + wordLen * 1.5) * treasureFontSize, 40);
+                const colRadius = (5 + wordLen * 2) * Math.min(treasureFontSize, 1.4);
+
+                let bestX = 50, bestY = 50;
+                let minOverlap = Infinity;
+
+                for (let attempt = 0; attempt < 20; attempt++) {
+                    const testX = marginX + Math.random() * (100 - marginX * 2);
+                    const testY = marginY + Math.random() * (100 - marginY * 2);
+
+                    let overlapScore = 0;
+                    for (let t of targets) {
+                        const dx = t.rawX - testX;
+                        const dy = t.rawY - testY;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        const combinedRadius = colRadius + t.colRadius;
+
+                        if (distance < combinedRadius) {
+                            overlapScore += (combinedRadius - distance);
+                        }
+                    }
+
+                    if (overlapScore === 0) {
+                        bestX = testX;
+                        bestY = testY;
+                        break;
+                    }
+
+                    if (overlapScore < minOverlap) {
+                        minOverlap = overlapScore;
+                        bestX = testX;
+                        bestY = testY; 
+                    }
+                }
+
+                const baseSizeRem = 1.5 * treasureFontSize;
+                const baseSizeVwMin = 1.5 * treasureFontSize;
+                const baseSizeVwRandom = 2 * treasureFontSize;
+                const maxSizeRem = 3.5 * treasureFontSize;
+
+                targets.push({
+                    id: `sc_${i}_${Math.random()}`,
+                    word: randomItem.word,
+                    rawX: bestX,
+                    rawY: bestY,
+                    x: `${bestX}%`,
+                    y: `${bestY}%`,
+                    rot: `${(Math.random() - 0.5) * 35}deg`, 
+                    size: `clamp(${baseSizeRem}rem, ${baseSizeVwMin + Math.random() * baseSizeVwRandom}vw, ${maxSizeRem}rem)`, 
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    zIndex: Math.floor(Math.random() * 10),
+                    colRadius: colRadius
+                });
+            }
+            return targets;
+        }, [treasureFontSize]);
+
+        // ★ 強制同步重置所有遮罩
+        const triggerMaskReset = useCallback(() => {
+            setRevealedBlocks([]);
+            setZoomLevel(15);
+            setBlurLevel(40);
+            setGameState('playing');
+            setWrongAttempts([]);
+            setGameKey(prev => prev + 1); 
+            setReshuffleKey(prev => prev + 1);
+        }, []);
+
+        // 導覽控制
+        const nextQuestion = useCallback(() => {
+            playClick();
+            triggerMaskReset(); 
+            if (activeTab !== 'custom' && currentPlayList.length > 0) {
+            setCurrentIdx(prev => Math.abs((prev + 1) % currentPlayList.length));
+            }
+        }, [playClick, triggerMaskReset, activeTab, currentPlayList.length]);
+
+        const prevQuestion = useCallback(() => {
+            playClick();
+            triggerMaskReset(); 
+            if (activeTab !== 'custom' && currentPlayList.length > 0) {
+            setCurrentIdx(prev => Math.abs((prev - 1 + currentPlayList.length) % currentPlayList.length));
+            }
+        }, [playClick, triggerMaskReset, activeTab, currentPlayList.length]);
+
+        useEffect(() => {
+            if (activeTab === 'treasure' && currentPlayList.length > 0) {
+            setScatteredTargets(generateScattered(currentPlayList));
+            }
+        }, [activeTab, playLevel, playType, reshuffleKey, currentPlayList, generateScattered]);
+
+        // 畫布初始化 (逼真的銀色刮刮樂材質)
+        const drawScratchCard = useCallback(() => {
+            const canvas = canvasRef.current;
+            if (!canvas || mode !== 'eraser') return;
+            const ctx = canvas.getContext('2d');
+            
+            const rect = canvas.parentElement.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = '#cbd5e1'; 
+            ctx.fillRect(0, 0, rect.width, rect.height);
+
+            ctx.fillStyle = '#94a3b8'; 
+            for(let i=0; i<150; i++) {
+                ctx.beginPath();
+                ctx.arc(Math.random() * rect.width, Math.random() * rect.height, Math.random() * 15 + 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.font = 'bold 32px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            for(let x = 80; x < rect.width + 100; x += 200) {
+                for(let y = 60; y < rect.height + 100; y += 120) {
+                    ctx.save();
+                    ctx.translate(x, y);
+                    ctx.rotate(-Math.PI / 8);
+                    ctx.fillText('✨ 刮刮樂 ✨', 0, 0);
+                    ctx.restore();
+                }
+            }
+        }, [mode]);
+
+        useEffect(() => {
+            if (mode === 'eraser' && gameState === 'playing') {
+            setTimeout(() => drawScratchCard(), 50);
+            }
+        }, [mode, gameKey, drawScratchCard, gameState]);
+
+        // 擦去事件處理
+        const handleStartDrawing = (e) => {
+            if (gameState !== 'playing' || mode !== 'eraser') return;
+            isDrawingRef.current = true;
+            eraseOnCanvas(e);
+        };
+
+        const handleMoveDrawing = (e) => {
+            if (!isDrawingRef.current || gameState !== 'playing') return;
+            eraseOnCanvas(e);
+        };
+
+        const handleStopDrawing = () => {
+            isDrawingRef.current = false;
+        };
+
+        const eraseOnCanvas = (e) => {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const rect = canvas.getBoundingClientRect();
+            
+            let clientX, clientY;
+            if (e.touches && e.touches.length > 0) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+            } else {
+            clientX = e.clientX;
+            clientY = e.clientY;
+            }
+
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
+
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.beginPath();
+            ctx.arc(x, y, eraserSize, 0, Math.PI * 2, false);
+            ctx.fill();
+        };
+
+        // 選項生成器
+        useEffect(() => {
+            if (activeTab === 'treasure') return; 
+            if (!currentItem || currentItem.word === '請出題') return;
+            
+            if (activeTab === 'custom') {
+            const validWrongs = activeCustomQuestion.wrongs.filter(w => w.trim() !== '');
+            while(validWrongs.length < 3) validWrongs.push('?');
+            setOptions([activeCustomQuestion.word, ...validWrongs].sort(() => 0.5 - Math.random()));
+            } else {
+            let availableWrongs = vocabList.filter(item => item.word !== currentItem.word && item.type === currentItem.type);
+            if (availableWrongs.length < 3) {
+                availableWrongs = vocabList.filter(item => item.word !== currentItem.word);
+            }
+            const wrongAnswers = availableWrongs.sort(() => 0.5 - Math.random()).slice(0, 3).map(item => item.word);
+            setOptions([currentItem.word, ...wrongAnswers].sort(() => 0.5 - Math.random()));
+            }
+        }, [currentItem, activeTab, activeCustomQuestion, vocabList, reshuffleKey]);
+
+        // 鍵盤快捷鍵
+        useEffect(() => {
+            const handleKeyDown = (e) => {
+            if (showEditor) return;
+            if (e.key === 'ArrowRight') {
+                if (activeTab === 'treasure') { triggerMaskReset(); playClick(); } else { nextQuestion(); }
+            }
+            if (e.key === 'ArrowLeft') {
+                if (activeTab === 'treasure') { triggerMaskReset(); playClick(); } else { prevQuestion(); }
+            }
+            };
+            window.addEventListener('keydown', handleKeyDown);
+            return () => window.removeEventListener('keydown', handleKeyDown);
+        }, [showEditor, activeTab, triggerMaskReset, playClick, nextQuestion, prevQuestion]);
+
+        const handleLevelOrTypeChange = () => {
+            triggerMaskReset();
+            setCurrentIdx(0);
+            setScore(0);
+        };
+
+        const handleStartCustom = () => {
+            if (!customTargetInput.trim()) return;
+            triggerMaskReset(); 
+            setActiveCustomQuestion({
+            word: customTargetInput.trim(),
+            wrongs: customWrongsInput
+            });
+            setScore(0);
+            playClick();
+        };
+
+        const handleTabChange = (tab) => {
+            setActiveTab(tab);
+            triggerMaskReset();
+            playClick();
+        };
+
+        // ★ 核心修復：使用 useCallback 與 functional update 確保點擊狀態絕對更新無誤
+        const handleBlockClick = useCallback((idx) => {
+            if (gameState !== 'playing') return;
+            setRevealedBlocks(prev => {
+            if (!prev.includes(idx)) {
+                setTimeout(() => playClick(), 0); 
+                return [...prev, idx];
+            }
+            return prev;
+            });
+        }, [gameState, playClick]);
+
+        const handleHint = () => {
+            if (gameState !== 'playing') return;
+            if (mode === 'mosaic') {
+            setRevealedBlocks(prev => {
+                const unrevealed = Array.from({ length: gridConfig.total }, (_, i) => i).filter(i => !prev.includes(i));
+                if (unrevealed.length === 0) return prev;
+                const hintCount = Math.max(3, Math.floor(gridConfig.total / 6));
+                const toReveal = unrevealed.sort(() => 0.5 - Math.random()).slice(0, hintCount);
+                return [...prev, ...toReveal];
+            });
+            setTimeout(() => playClick(), 0);
+            } else if (mode === 'eraser') {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const rect = canvas.getBoundingClientRect();
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.beginPath();
+            const startX = Math.random() * rect.width;
+            const startY = Math.random() * rect.height;
+            ctx.arc(startX, startY, 120, 0, Math.PI * 2);
+            ctx.fill();
+            setTimeout(() => playClick(), 0);
+            }
+        };
+
+        const triggerConfetti = () => {
+            if (typeof confetti !== 'function') return;
+            const duration = 2 * 1000;
+            const end = Date.now() + duration;
+
+            const frame = () => {
+            confetti({
+                particleCount: 5,
+                angle: 60,
+                spread: 55,
+                origin: { x: 0 },
+                colors: ['#26ccff', '#a25afd', '#ff5e7e', '#88ff5a', '#fcff42', '#ffa62d', '#ff36ff']
+            });
+            confetti({
+                particleCount: 5,
+                angle: 120,
+                spread: 55,
+                origin: { x: 1 },
+                colors: ['#26ccff', '#a25afd', '#ff5e7e', '#88ff5a', '#fcff42', '#ffa62d', '#ff36ff']
+            });
+
+            if (Date.now() < end) {
+                requestAnimationFrame(frame);
+            }
+            };
+            frame();
+        };
+
+        const handleRevealAll = () => {
+            if (mode === 'mosaic') {
+            setRevealedBlocks(Array.from({ length: gridConfig.total }, (_, i) => i));
+            } else if (mode === 'eraser') {
+            const canvas = canvasRef.current;
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+            }
+            setBlurLevel(0);
+            setZoomLevel(1);
+            
+            if (activeTab === 'treasure' && gameState === 'playing') {
+            setGameState('answered');
+            playCorrect();
+            triggerConfetti();
+            }
+        };
+
+        const handleAnswer = (answer) => {
+            if (gameState !== 'playing') return;
+            
+            if (answer === currentItem.word) {
+            const points = Math.max(10 - wrongAttempts.length * 3, 4); 
+            setScore(prev => prev + points);
+            setGameState('answered');
+            handleRevealAll();
+            triggerConfetti(); 
+            playCorrect(); 
+            } else {
+            if (!wrongAttempts.includes(answer)) {
+                setWrongAttempts([...wrongAttempts, answer]);
+                playWrong(); 
+            }
+            }
+        };
+
+        // 編輯題庫
+        const handleAddWord = (e) => {
+            e.preventDefault();
+            if (!newWord.trim()) return;
+            const trimmed = newWord.trim();
+            const newItem = { 
+            id: Math.random().toString(36).substr(2, 9), 
+            word: trimmed, 
+            level: newLevel, 
+            type: trimmed.length === 1 ? 'char' : 'word',
+            pinyin: '', 
+            english: '' 
+            };
+            setVocabList([newItem, ...vocabList]);
+            setNewWord('');
+            playClick();
+        };
+
+        const handleDeleteWord = (id) => {
+            setVocabList(vocabList.filter(item => item.id !== id));
+            playClick();
+        };
+
+        // --- 編輯器畫面 ---
+        if (showEditor) {
+            return (
+            <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans text-slate-800 flex flex-col">
+                <div className="max-w-4xl mx-auto w-full flex-grow animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="flex justify-between items-center mb-8">
+                    <h1 className="text-3xl font-bold text-blue-600 flex items-center gap-2">
+                    <Edit3Icon className="w-8 h-8" /> 題庫設定
+                    </h1>
+                    <button onClick={() => { setShowEditor(false); playClick(); }} className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-5 py-2.5 rounded-xl font-bold hover:bg-slate-100 hover:text-blue-600 transition-all shadow-sm">
+                    <ArrowLeftIcon className="w-5 h-5" /> 返回遊戲
+                    </button>
+                </div>
+
+                <div className="bg-white p-6 md:p-8 rounded-3xl shadow-lg border border-slate-100 mb-8">
+                    <h2 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-700"><PlusIcon className="w-5 h-5" /> 新增生詞或生字</h2>
+                    <form onSubmit={handleAddWord} className="flex flex-col md:flex-row gap-4 md:items-end">
+                    <div className="flex-1">
+                        <label className="block text-sm font-bold text-slate-500 mb-1.5">生詞 / 生字 (系統將自動分類)</label>
+                        <input type="text" value={newWord} onChange={(e) => setNewWord(e.target.value)} className="w-full border border-slate-200 bg-slate-50 rounded-xl p-3.5 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="輸入單字或詞彙 (例如：新、同學)" />
+                    </div>
+                    <div className="w-full md:w-32">
+                        <label className="block text-sm font-bold text-slate-500 mb-1.5">課別/分類</label>
+                        <input type="text" value={newLevel} onChange={(e) => setNewLevel(e.target.value.toUpperCase())} className="w-full border border-slate-200 bg-slate-50 rounded-xl p-3.5 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="例如: L01" />
+                    </div>
+                    <button type="submit" className="w-full md:w-auto bg-blue-600 text-white px-8 py-3.5 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-md hover:shadow-lg active:scale-95">新增</button>
+                    </form>
+                </div>
+
+                <div className="bg-white p-6 md:p-8 rounded-3xl shadow-lg border border-slate-100">
+                    <h2 className="font-bold text-lg flex items-center gap-2 text-slate-700 mb-6"><BookOpenIcon className="w-5 h-5" /> 目前題庫清單 (共 {vocabList.length} 筆)</h2>
+                    <div className="overflow-y-auto max-h-[500px] pr-2 custom-scrollbar">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        {vocabList.map(item => (
+                        <div key={item.id} className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:border-blue-300 hover:shadow-sm transition-all group">
+                            <div className="flex items-center gap-3">
+                            <span className="font-black text-xl text-slate-800">{item.word}</span>
+                            <div className="flex flex-col gap-1">
+                                <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold w-fit ${item.type === 'char' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
+                                {item.type === 'char' ? '生字' : '生詞'}
+                                </span>
+                                <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md font-bold w-fit">{item.level}</span>
+                            </div>
+                            </div>
+                            <button onClick={() => handleDeleteWord(item.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-all" title="刪除">
+                            <Trash2Icon className="w-4 h-4" />
+                            </button>
+                        </div>
+                        ))}
+                    </div>
+                    </div>
+                </div>
+                </div>
+                <footer className="text-center mt-12 pb-4 text-slate-400 text-sm font-medium">
+                Powered by Gemini | Sophia老師的AI練習本
+                </footer>
+            </div>
+            );
+        }
+
+        // --- 遊戲畫面 ---
+        return (
+            <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans text-slate-800 flex flex-col selection:bg-blue-200">
+            <div className="max-w-6xl mx-auto w-full flex-grow">
+                
+                {/* Header */}
+                <div className="flex flex-col md:flex-row justify-between items-center mb-6 md:mb-10 gap-4">
+                <div className="text-center md:text-left">
+                    <h1 className="text-3xl md:text-4xl font-black text-blue-600 flex items-center justify-center md:justify-start gap-3 tracking-tight">
+                    <SearchIcon className="w-8 h-8 md:w-10 md:h-10 text-blue-500" /> 華語小偵探
+                    </h1>
+                    <p className="text-slate-500 mt-2 flex items-center justify-center md:justify-start gap-2 font-medium">
+                    生字躲貓貓 
+                    <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm">
+                        {activeTab === 'custom' ? '自訂模式' : (activeTab === 'treasure' ? '全課尋寶' : '單題闖關')}
+                    </span>
+                    </p>
+                </div>
+                
+                <div className="flex items-center gap-3 w-full md:w-auto justify-center">
+                    {activeTab !== 'treasure' && (
+                    <div className="flex items-center gap-4 bg-white p-2.5 pr-4 rounded-2xl shadow-sm border border-slate-200">
+                        <div className="flex items-center gap-2 bg-amber-50 px-3 py-1.5 rounded-xl">
+                        <TrophyIcon className="text-amber-500 w-5 h-5" />
+                        <span className="font-black text-xl text-amber-600">{score}</span>
+                        </div>
+                        {activeTab === 'bank' && currentPlayList.length > 0 && (
+                        <>
+                            <div className="h-8 w-[2px] bg-slate-100"></div>
+                            <div className="text-sm font-bold text-slate-500 flex items-center gap-1.5">
+                            <span className="text-slate-800 text-lg">{(currentIdx % currentPlayList.length) + 1}</span> 
+                            / {currentPlayList.length}
+                            </div>
+                        </>
+                        )}
+                    </div>
+                    )}
+                    
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={() => { setIsMuted(!isMuted); initAudio(); }} 
+                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all border font-bold text-sm ${isMuted ? 'bg-red-50 text-red-600 border-red-200 shadow-sm' : 'bg-white border-slate-200 text-slate-600 shadow-sm hover:bg-slate-50'}`} 
+                            title={isMuted ? "開啟音效" : "靜音"}
+                        >
+                            {isMuted ? <VolumeXIcon className="w-5 h-5" /> : <Volume2Icon className="w-5 h-5" />}
+                            <span className="hidden sm:inline">{isMuted ? '靜音' : '音效'}</span>
+                        </button>
+                        <button 
+                            onClick={() => { setIsSidebarOpen(!isSidebarOpen); playClick(); }} 
+                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all border font-bold text-sm ${!isSidebarOpen ? 'bg-blue-600 text-white border-blue-600 shadow-md hover:bg-blue-700' : 'bg-white border-slate-200 text-slate-600 shadow-sm hover:bg-slate-50 hover:text-blue-600'}`} 
+                            title={isSidebarOpen ? "放大畫面 (收起選單)" : "顯示選單"}
+                        >
+                            {!isSidebarOpen ? <MenuIcon className="w-5 h-5" /> : <MaximizeIcon className="w-5 h-5" />}
+                            <span className="hidden sm:inline">{!isSidebarOpen ? '顯示選單' : '放大畫面'}</span>
+                        </button>
+                        <button 
+                            onClick={() => { setShowEditor(true); playClick(); }} 
+                            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl shadow-sm hover:bg-slate-50 hover:text-blue-600 text-slate-600 transition-all font-bold text-sm" 
+                            title="題庫設定"
+                        >
+                            <SettingsIcon className="w-5 h-5" />
+                            <span className="hidden sm:inline">題庫設定</span>
+                        </button>
+                    </div>
+                </div>
+                </div>
+
+                {activeTab !== 'custom' && currentPlayList.length === 0 ? (
+                <div className="bg-white p-12 md:p-20 rounded-[3rem] shadow-xl text-center border border-slate-100 flex flex-col items-center justify-center animate-in zoom-in-95 duration-500">
+                    <div className="bg-slate-50 p-6 rounded-full mb-6">
+                    <BookOpenIcon className="w-16 h-16 text-slate-300" />
+                    </div>
+                    <h2 className="text-2xl md:text-3xl font-black text-slate-700 mb-3">這個範圍目前沒有字詞喔！</h2>
+                    <p className="text-slate-500 font-medium mb-8">請嘗試切換其他課別，或是改變字詞篩選條件。</p>
+                    <button onClick={() => { setShowEditor(true); playClick(); }} className="bg-blue-600 text-white px-8 py-3.5 rounded-2xl font-bold text-lg hover:bg-blue-700 hover:shadow-lg transition-all active:scale-95 flex items-center gap-2">
+                    <Edit3Icon className="w-5 h-5" /> 前往題庫設定
+                    </button>
+                </div>
+                ) : (
+                <div className={`grid gap-6 md:gap-8 transition-all duration-500 ${isSidebarOpen ? 'lg:grid-cols-12' : 'grid-cols-1 max-w-4xl mx-auto w-full'}`}>
+                    
+                    {/* Left: Sidebar Controls */}
+                    {isSidebarOpen && (
+                    <div className="lg:col-span-4 space-y-5 animate-in slide-in-from-left-8 fade-in duration-500">
+                        <div className="bg-white p-6 rounded-[2rem] shadow-lg border border-slate-100 flex flex-col h-full">
+                        
+                        {/* 模式切換 Tabs */}
+                        <div className="flex bg-slate-100 rounded-2xl p-1.5 mb-8">
+                            <button onClick={() => handleTabChange('bank')} className={`flex-1 py-2 rounded-xl text-xs md:text-sm font-black transition-all ${activeTab === 'bank' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>
+                            📚 單題
+                            </button>
+                            <button onClick={() => handleTabChange('treasure')} className={`flex-1 py-2 rounded-xl text-xs md:text-sm font-black transition-all ${activeTab === 'treasure' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>
+                            🗺️ 全課尋寶
+                            </button>
+                            <button onClick={() => handleTabChange('custom')} className={`flex-1 py-2 rounded-xl text-xs md:text-sm font-black transition-all ${activeTab === 'custom' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>
+                            ✍️ 自訂
+                            </button>
+                        </div>
+
+                        <div className="flex-grow space-y-8">
+                            {/* 題庫/尋寶模式選項 */}
+                            {(activeTab === 'bank' || activeTab === 'treasure') && (
+                            <div className="animate-in fade-in slide-in-from-left-4 space-y-5">
+                                <div>
+                                <label className="font-black mb-2 flex items-center gap-2 text-sm text-slate-400 uppercase tracking-wider">
+                                    <BookOpenIcon className="w-4 h-4" /> 測驗範圍
+                                </label>
+                                <select value={playLevel} onChange={(e) => { setPlayLevel(e.target.value); handleLevelOrTypeChange(); playClick(); }} className="w-full bg-slate-50 border border-slate-200 text-slate-700 font-bold text-sm rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white p-3.5 outline-none transition-all cursor-pointer hover:border-blue-300">
+                                    {availableLevels.map(lvl => (
+                                    <option key={lvl} value={lvl}>{lvl === 'All' ? '全部課別 (大會考)' : `第 ${lvl.replace('L', '')} 課 (${lvl})`}</option>
+                                    ))}
+                                </select>
+                                </div>
+                                <div>
+                                <label className="font-black mb-2 flex items-center gap-2 text-sm text-slate-400 uppercase tracking-wider">
+                                    <TypeIcon className="w-4 h-4" /> 字詞類型
+                                </label>
+                                <select value={playType} onChange={(e) => { setPlayType(e.target.value); handleLevelOrTypeChange(); playClick(); }} className="w-full bg-slate-50 border border-slate-200 text-slate-700 font-bold text-sm rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white p-3.5 outline-none transition-all cursor-pointer hover:border-blue-300">
+                                    <option value="All">全部混合 (生字 + 生詞)</option>
+                                    <option value="char">僅散落「生字」(單一個字)</option>
+                                    <option value="word">僅散落「生詞」(兩個字以上)</option>
+                                </select>
+                                </div>
+                            </div>
+                            )}
+
+                            {/* 自訂題目選項 */}
+                            {activeTab === 'custom' && (
+                            <div className="animate-in fade-in slide-in-from-right-4 space-y-4">
+                                <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100">
+                                <label className="font-black mb-2 flex items-center gap-2 text-sm text-blue-700">
+                                    <PenToolIcon className="w-4 h-4" /> 謎底字詞 (正確答案)
+                                </label>
+                                <input 
+                                    value={customTargetInput} 
+                                    onChange={(e) => setCustomTargetInput(e.target.value)} 
+                                    className="w-full border border-blue-200 bg-white rounded-xl p-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
+                                    placeholder="請輸入一個字或詞 (例：請)" 
+                                />
+                                </div>
+                                <div>
+                                <label className="font-black mb-2 flex items-center gap-2 text-xs text-slate-400 uppercase">
+                                    干擾選項 (選填，適合形近字)
+                                </label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {[0, 1, 2].map(idx => (
+                                    <input 
+                                        key={idx}
+                                        value={customWrongsInput[idx]}
+                                        onChange={(e) => {
+                                        const newWrongs = [...customWrongsInput];
+                                        newWrongs[idx] = e.target.value;
+                                        setCustomWrongsInput(newWrongs);
+                                        }}
+                                        className="w-full border border-slate-200 bg-slate-50 rounded-xl p-3 text-sm font-bold text-center focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
+                                        placeholder={['清', '情', '晴'][idx]} 
+                                    />
+                                    ))}
+                                </div>
+                                </div>
+                                <button onClick={handleStartCustom} className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-3.5 font-black shadow-md hover:shadow-lg active:scale-95 transition-all mt-2 flex items-center justify-center gap-2">
+                                發布題目！ <ChevronRightIcon className="w-5 h-5" />
+                                </button>
+                            </div>
+                            )}
+                        </div>
+
+                        <div className="mt-8 pt-8 border-t border-slate-100">
+                            <h3 className="font-black mb-4 flex items-center gap-2 text-sm text-slate-400 uppercase tracking-wider">
+                            偵探工具箱 (工具列)
+                            </h3>
+                            
+                            {/* 玩法模式 */}
+                            <div className={`grid gap-2 mb-4 ${activeTab === 'treasure' ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-4'}`}>
+                            {[
+                                { id: 'eraser', label: '刮刮樂', icon: EraserIcon },
+                                { id: 'mosaic', label: '馬賽克', icon: GridIcon },
+                                { id: 'zoom', label: '放大鏡', icon: ZoomInIcon },
+                                { id: 'blur', label: '起濃霧', icon: SearchIcon }
+                            ].filter(m => activeTab !== 'treasure' || (m.id === 'eraser' || m.id === 'mosaic')).map((m) => (
+                                <button
+                                key={m.id}
+                                onClick={() => { setMode(m.id); playClick(); }}
+                                className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-2xl transition-all border ${
+                                    mode === m.id ? 'bg-blue-50 border-blue-300 text-blue-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:border-slate-300'
+                                }`}
+                                >
+                                <m.icon className={`w-5 h-5 ${mode === m.id ? 'text-blue-600' : ''}`} />
+                                <span className="text-[11px] font-bold">{m.label}</span>
+                                </button>
+                            ))}
+                            </div>
+
+                            {/* 微調工具 */}
+                            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                            {mode === 'zoom' && (
+                                <>
+                                <div className="flex justify-between items-center text-xs font-bold text-slate-500 mb-1">
+                                    <span>縮放程度</span><span>{zoomLevel}x</span>
+                                </div>
+                                <input type="range" min="1" max="15" step="0.5" value={zoomLevel} onChange={(e) => setZoomLevel(parseFloat(e.target.value))} className="w-full accent-blue-600" />
+                                </>
+                            )}
+                            {mode === 'blur' && (
+                                <>
+                                <div className="flex justify-between items-center text-xs font-bold text-slate-500 mb-1">
+                                    <span>模糊程度</span><span>{blurLevel}px</span>
+                                </div>
+                                <input type="range" min="0" max="40" value={blurLevel} onChange={(e) => setBlurLevel(parseInt(e.target.value))} className="w-full accent-blue-600" />
+                                </>
+                            )}
+                            {mode === 'mosaic' && (
+                                <>
+                                <div className="flex justify-between items-center text-xs font-bold text-slate-500 mb-1">
+                                    <span>難度 (馬賽克格數)</span><span>{gridConfig.total} 格</span>
+                                </div>
+                                <div className="flex bg-white rounded-lg p-1 border border-slate-200 mb-3 shadow-sm">
+                                    {[
+                                    { id: 'easy', label: '簡單' },
+                                    { id: 'medium', label: '中等' },
+                                    { id: 'hard', label: '困難' }
+                                    ].map(d => (
+                                    <button
+                                        key={d.id}
+                                        onClick={() => { setMosaicDifficulty(d.id); setRevealedBlocks([]); playClick(); }}
+                                        className={`flex-1 py-1.5 rounded-md text-xs font-bold transition-all ${
+                                        mosaicDifficulty === d.id ? 'bg-blue-100 text-blue-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        {d.label}
+                                    </button>
+                                    ))}
+                                </div>
+                                </>
+                            )}
+                            {mode === 'eraser' && (
+                                <>
+                                <div className="flex justify-between items-center text-xs font-bold text-slate-500 mb-1">
+                                    <span>硬幣/橡皮擦大小</span><span>{eraserSize}px</span>
+                                </div>
+                                <input type="range" min="20" max="150" value={eraserSize} onChange={(e) => setEraserSize(parseInt(e.target.value))} className="w-full accent-blue-600 mb-3" />
+                                </>
+                            )}
+                            
+                            {/* 尋寶模式專用字體大小調整 */}
+                            {activeTab === 'treasure' && (
+                                <>
+                                <div className="flex justify-between items-center text-xs font-bold text-slate-500 mb-1 mt-3">
+                                    <span>尋寶圖字體大小</span><span>{Math.round(treasureFontSize * 100)}%</span>
+                                </div>
+                                <input 
+                                    type="range" 
+                                    min="0.5" 
+                                    max="2.5" 
+                                    step="0.1" 
+                                    value={treasureFontSize} 
+                                    onChange={(e) => {
+                                        setTreasureFontSize(parseFloat(e.target.value)); 
+                                        setReshuffleKey(prev => prev + 1); 
+                                    }} 
+                                    className="w-full accent-blue-600 mb-3" 
+                                />
+                                </>
+                            )}
+
+                            {(mode === 'mosaic' || mode === 'eraser') && (
+                                <div className="grid grid-cols-2 gap-2 mt-2">
+                                <button onClick={handleHint} className="flex items-center justify-center gap-1.5 p-2.5 text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 rounded-xl hover:bg-amber-100 transition-all active:scale-95">
+                                    <LightbulbIcon className="w-4 h-4" /> 給提示
+                                </button>
+                                <button onClick={handleRevealAll} className="flex items-center justify-center gap-1.5 p-2.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-all active:scale-95">
+                                    <EyeIcon className="w-4 h-4" /> 全開
+                                </button>
+                                </div>
+                            )}
+                            </div>
+                        </div>
+
+                        </div>
+                    </div>
+                    )}
+
+                    {/* Middle: Canvas & Game Area */}
+                    <div className={`${isSidebarOpen ? 'lg:col-span-8' : 'col-span-1'} flex flex-col gap-6 transition-all duration-500`}>
+                    
+                    {currentItem.word === '請出題' ? (
+                        <div className="flex-grow aspect-square md:aspect-[4/3] bg-white rounded-[2.5rem] shadow-xl border border-slate-100 flex flex-col items-center justify-center p-8 text-center border-dashed border-4 border-slate-200">
+                        <div className="bg-slate-50 p-6 rounded-full mb-4">
+                            <PenToolIcon className="w-12 h-12 text-slate-400" />
+                        </div>
+                        <h3 className="text-2xl font-black text-slate-700 mb-2">等待老師出題中...</h3>
+                        <p className="text-slate-500 font-medium">請在左側面板輸入謎底生字與干擾選項</p>
+                        </div>
+                    ) : (
+                        <>
+                        {/* 收合側邊欄時的上浮工具列 */}
+                        {!isSidebarOpen && (
+                            <div className="bg-white p-3 rounded-2xl shadow-md border border-slate-200 flex flex-wrap items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 z-10 sticky top-4 mx-2">
+                            <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl flex-wrap">
+                                {[
+                                { id: 'eraser', label: '刮刮樂', icon: EraserIcon },
+                                { id: 'mosaic', label: '馬賽克', icon: GridIcon },
+                                { id: 'zoom', label: '放大鏡', icon: ZoomInIcon },
+                                { id: 'blur', label: '迷霧', icon: SearchIcon }
+                                ].filter(m => activeTab !== 'treasure' || (m.id === 'eraser' || m.id === 'mosaic')).map((m) => (
+                                <button
+                                    key={m.id}
+                                    onClick={() => { setMode(m.id); playClick(); }}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${
+                                    mode === m.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                                    }`}
+                                >
+                                    <m.icon className="w-4 h-4" />
+                                    <span className="hidden sm:inline">{m.label}</span>
+                                </button>
+                                ))}
+                            </div>
+
+                            <div className="flex items-center gap-3 flex-1 min-w-[200px] px-2">
+                                {mode === 'zoom' && <input type="range" min="1" max="15" step="0.5" value={zoomLevel} onChange={(e) => setZoomLevel(parseFloat(e.target.value))} className="w-full accent-blue-600" />}
+                                {mode === 'blur' && <input type="range" min="0" max="40" value={blurLevel} onChange={(e) => setBlurLevel(parseInt(e.target.value))} className="w-full accent-blue-600" />}
+                                {mode === 'eraser' && <input type="range" min="20" max="150" value={eraserSize} onChange={(e) => setEraserSize(parseInt(e.target.value))} className="w-full accent-blue-600" />}
+                                
+                                {mode === 'mosaic' && (
+                                <div className="hidden sm:flex bg-slate-100 rounded-lg p-1 border border-slate-200 mr-2 items-center">
+                                    {[
+                                    { id: 'easy', label: '簡單' },
+                                    { id: 'medium', label: '中等' },
+                                    { id: 'hard', label: '困難' }
+                                    ].map(d => (
+                                    <button
+                                        key={d.id}
+                                        onClick={() => { setMosaicDifficulty(d.id); setRevealedBlocks([]); playClick(); }}
+                                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all whitespace-nowrap ${
+                                        mosaicDifficulty === d.id ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                                        }`}
+                                    >
+                                        {d.label}
+                                    </button>
+                                    ))}
+                                </div>
+                                )}
+                                
+                                {/* 懸浮工具列上的字體大小調整 */}
+                                {activeTab === 'treasure' && (
+                                <div className="flex items-center gap-2">
+                                    <TypeIcon className="w-4 h-4 text-slate-400" />
+                                    <input 
+                                        type="range" 
+                                        min="0.5" 
+                                        max="2.5" 
+                                        step="0.1" 
+                                        value={treasureFontSize} 
+                                        onChange={(e) => {
+                                            setTreasureFontSize(parseFloat(e.target.value)); 
+                                            setReshuffleKey(prev => prev + 1); 
+                                        }} 
+                                        className="w-20 accent-blue-600" 
+                                    />
+                                </div>
+                                )}
+
+                                {(mode === 'mosaic' || mode === 'eraser') && (
+                                <div className="flex w-full gap-2 justify-end">
+                                    <button onClick={handleHint} className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-amber-600 bg-amber-50 rounded-lg hover:bg-amber-100 transition-all border border-amber-200 whitespace-nowrap">
+                                    <LightbulbIcon className="w-4 h-4" /> 提示
+                                    </button>
+                                    <button onClick={handleRevealAll} className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-all border border-blue-200 whitespace-nowrap">
+                                    <EyeIcon className="w-4 h-4" /> 全開
+                                    </button>
+                                </div>
+                                )}
+                            </div>
+                            </div>
+                        )}
+
+                        {/* Canvas 畫布區：外框與文字包覆分離設計，加入 key=gameKey 強制重繪避免曝光殘影 */}
+                        <div key={gameKey} className="relative min-h-[400px] md:min-h-[500px] bg-white rounded-[2.5rem] md:rounded-[3rem] shadow-xl border-[10px] border-white overflow-hidden flex items-center justify-center group flex-grow">
+                            
+                            {/* ★ 新手引導提示：尋寶刮刮樂專用 ★ */}
+                            {activeTab === 'treasure' && gameState === 'playing' && mode === 'eraser' && (
+                            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur px-5 py-2.5 rounded-full shadow-md text-slate-600 font-bold text-sm md:text-base z-40 pointer-events-none animate-bounce border border-slate-100">
+                                👆 用滑鼠或手指刮開圖層，找出散落的生字！
+                            </div>
+                            )}
+
+                            {/* ★ 尋寶模式 (散落的字) 或是 單題模式 (單一個字) ★ */}
+                            {activeTab === 'treasure' ? (
+                            <div className="absolute inset-0 w-full h-full p-4 overflow-hidden bg-slate-50">
+                                {scatteredTargets.map(t => (
+                                <span
+                                    key={t.id}
+                                    className="absolute font-black select-none pointer-events-none"
+                                    style={{
+                                    left: t.x, top: t.y,
+                                    transform: `translate(-50%, -50%) rotate(${t.rot})`,
+                                    fontSize: t.size,
+                                    color: t.color,
+                                    zIndex: t.zIndex,
+                                    whiteSpace: 'nowrap',
+                                    textShadow: '2px 2px 4px rgba(0,0,0,0.1)'
+                                    }}
+                                >
+                                    {t.word}
+                                </span>
+                                ))}
+                                
+                                {/* 尋寶模式專屬：滿版馬賽克 */}
+                                {mode === 'mosaic' && (
+                                <div 
+                                    className="absolute inset-0 grid z-20"
+                                    style={{
+                                    gridTemplateColumns: `repeat(${gridConfig.cols}, minmax(0, 1fr))`,
+                                    gridTemplateRows: `repeat(${gridConfig.rows}, minmax(0, 1fr))`
+                                    }}
+                                >
+                                    {Array.from({ length: gridConfig.total }).map((_, i) => {
+                                    const isRevealed = revealedBlocks.includes(i);
+                                    return (
+                                        <div
+                                        key={i}
+                                        onClick={() => handleBlockClick(i)}
+                                        className={`w-full h-full border-[0.5px] border-white/20 transition-all duration-300 flex items-center justify-center
+                                            ${isRevealed 
+                                            ? 'bg-transparent scale-110 opacity-0 pointer-events-none' 
+                                            : 'bg-blue-500 hover:bg-blue-400 cursor-pointer shadow-[inset_0_0_10px_rgba(0,0,0,0.1)]'}`}
+                                        >
+                                        {!isRevealed && <span className="text-white/60 font-bold text-xs md:text-sm select-none pointer-events-none">{i + 1}</span>}
+                                        </div>
+                                    );
+                                    })}
+                                </div>
+                                )}
+                            </div>
+                            ) : (
+                            <div className="relative inline-flex items-center justify-center p-2 md:p-4">
+                                
+                                {/* The Target Word */}
+                                <div 
+                                className={`font-black text-slate-800 flex items-center justify-center text-center select-none pointer-events-none ${gameState === 'answered' ? 'transition-all duration-1000 ease-out' : ''}`}
+                                style={{
+                                    fontSize: currentItem.word.length > 2 
+                                    ? 'clamp(5rem, 15vw, 10rem)' 
+                                    : (currentItem.word.length === 2 ? 'clamp(8rem, 22vw, 16rem)' : 'clamp(14rem, 35vw, 28rem)'),
+                                    transform: mode === 'zoom' ? `scale(${zoomLevel})` : 'scale(1)',
+                                    filter: mode === 'blur' ? `blur(${blurLevel}px)` : 'none',
+                                    lineHeight: 1.1,
+                                    wordBreak: 'keep-all',
+                                    whiteSpace: 'nowrap'
+                                }}
+                                >
+                                {currentItem.word}
+                                </div>
+
+                                {/* 單題模式專屬：包覆文字的緊密馬賽克 */}
+                                {mode === 'mosaic' && (
+                                <div 
+                                    className="absolute inset-0 grid z-10"
+                                    style={{
+                                    gridTemplateColumns: `repeat(${gridConfig.cols}, minmax(0, 1fr))`,
+                                    gridTemplateRows: `repeat(${gridConfig.rows}, minmax(0, 1fr))`
+                                    }}
+                                >
+                                    {Array.from({ length: gridConfig.total }).map((_, i) => {
+                                    const isRevealed = revealedBlocks.includes(i);
+                                    return (
+                                        <div
+                                        key={i}
+                                        onClick={() => handleBlockClick(i)}
+                                        className={`w-full h-full border-[0.5px] border-white/20 transition-all duration-300 flex items-center justify-center
+                                            ${isRevealed 
+                                            ? 'bg-transparent scale-110 opacity-0 pointer-events-none' 
+                                            : 'bg-blue-500 hover:bg-blue-400 cursor-pointer shadow-[inset_0_0_10px_rgba(0,0,0,0.1)]'}`}
+                                        >
+                                        {!isRevealed && <span className="text-white/60 font-bold text-xs md:text-sm select-none pointer-events-none">{i + 1}</span>}
+                                        </div>
+                                    );
+                                    })}
+                                </div>
+                                )}
+
+                            </div>
+                            )}
+
+                            {/* 共用遮罩層：擦去遊戲 (Eraser) 刮刮樂 Canvas */}
+                            {mode === 'eraser' && (
+                            <canvas
+                                ref={canvasRef}
+                                onMouseDown={handleStartDrawing}
+                                onMouseMove={handleMoveDrawing}
+                                onMouseUp={handleStopDrawing}
+                                onMouseLeave={handleStopDrawing}
+                                onTouchStart={handleStartDrawing}
+                                onTouchMove={handleMoveDrawing}
+                                onTouchEnd={handleStopDrawing}
+                                className={`absolute inset-0 w-full h-full z-30 touch-none ${gameState === 'playing' ? 'cursor-crosshair' : 'pointer-events-none'}`}
+                            />
+                            )}
+
+                            {/* Status Overlay (單題模式答對結算畫面，蓋住整個大白板) */}
+                            {activeTab !== 'treasure' && gameState === 'answered' && (
+                            <div className="absolute inset-0 bg-white/80 backdrop-blur-md z-40 flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-500 p-6">
+                                <div className="bg-green-100 p-6 rounded-full mb-6 shadow-[0_0_40px_rgba(34,197,94,0.3)] animate-pulse">
+                                <CheckCircleIcon className="w-20 h-20 text-green-600" />
+                                </div>
+                                <div className="text-center w-full max-w-lg">
+                                <h3 
+                                    className="font-black text-slate-800 mb-8 text-center text-shadow-sm"
+                                    style={{
+                                    fontSize: currentItem.word.length > 2 ? 'clamp(4rem, 10vw, 7rem)' : 'clamp(6rem, 15vw, 10rem)',
+                                    lineHeight: 1.1
+                                    }}
+                                >
+                                    {currentItem.word}
+                                </h3>
+                                <button 
+                                    onClick={nextQuestion}
+                                    className="flex items-center justify-center gap-2 bg-blue-600 text-white w-full py-4 rounded-2xl font-black text-xl hover:bg-blue-700 transition-all transform hover:scale-[1.02] active:scale-95 shadow-lg hover:shadow-xl"
+                                >
+                                    {activeTab === 'custom' ? '重新挑戰此題' : '下一題'} <ChevronRightIcon className="w-6 h-6" />
+                                </button>
+                                </div>
+                            </div>
+                            )}
+                        </div>
+
+                        {/* 尋寶模式：下方沒有選項，只有重新洗牌的按鈕 */}
+                        {activeTab === 'treasure' && (
+                            <div className="flex justify-center items-center mt-2">
+                            <button
+                                onClick={() => { triggerMaskReset(); playClick(); }}
+                                className="flex items-center justify-center gap-2 bg-white border-2 border-slate-200 text-blue-600 w-full py-4 rounded-[2rem] font-black text-xl hover:bg-blue-50 hover:border-blue-300 transition-all active:scale-[0.98] shadow-[0_6px_0_rgb(226,232,240)] hover:shadow-[0_6px_0_rgb(147,197,253)]"
+                            >
+                                <MapIcon className="w-6 h-6" /> 換一張新的尋寶圖
+                            </button>
+                            </div>
+                        )}
+
+                        {/* 單題模式：Answer Options */}
+                        {activeTab !== 'treasure' && (
+                            <div className="grid grid-cols-2 gap-3 md:gap-4">
+                            {options.map((option, index) => {
+                                const isWrong = wrongAttempts.includes(option);
+                                const isCorrect = gameState === 'answered' && option === currentItem.word;
+                                
+                                return (
+                                <button
+                                    key={index}
+                                    disabled={gameState !== 'playing' || isWrong}
+                                    onClick={() => handleAnswer(option)}
+                                    className={`relative overflow-hidden p-5 md:p-6 rounded-[2rem] text-2xl md:text-3xl font-black transition-all transform active:scale-[0.98]
+                                    ${gameState === 'answered' 
+                                        ? (isCorrect 
+                                            ? 'bg-green-500 text-white shadow-[0_8px_0_rgb(21,128,61)] translate-y-1' 
+                                            : 'bg-slate-100 text-slate-300 opacity-50')
+                                        : (isWrong
+                                            ? 'bg-slate-100 text-slate-300 line-through opacity-60'
+                                            : 'bg-white text-slate-700 hover:text-blue-600 border-2 border-slate-100 hover:border-blue-300 shadow-[0_6px_0_rgb(226,232,240)] hover:shadow-[0_6px_0_rgb(147,197,253)]')
+                                    }
+                                    `}
+                                >
+                                    <span className="relative z-10">{option}</span>
+                                </button>
+                                );
+                            })}
+                            </div>
+                        )}
+
+                        {/* Navigation Controls */}
+                        {activeTab !== 'treasure' && (
+                            <div className="flex justify-between items-center bg-white p-3 rounded-2xl shadow-sm border border-slate-100 mt-2">
+                            <button
+                                onClick={prevQuestion}
+                                className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-50 text-slate-600 rounded-xl font-bold hover:bg-blue-50 hover:text-blue-600 transition-all"
+                                title="快速鍵: 左箭頭 (←)"
+                            >
+                                <ChevronLeftIcon className="w-5 h-5" /> <span className="hidden sm:inline">上一題</span>
+                            </button>
+                            
+                            <span className="text-xs font-bold text-slate-400 hidden sm:inline-flex items-center gap-1 bg-slate-50 px-3 py-1.5 rounded-lg">
+                                <SettingsIcon className="w-3.5 h-3.5" /> 可使用鍵盤 ← → 切換題目
+                            </span>
+
+                            <button
+                                onClick={nextQuestion}
+                                className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-50 text-slate-600 rounded-xl font-bold hover:bg-blue-50 hover:text-blue-600 transition-all"
+                                title="快速鍵: 右箭頭 (→)"
+                            >
+                                <span className="hidden sm:inline">下一題</span> <ChevronRightIcon className="w-5 h-5" />
+                            </button>
+                            </div>
+                        )}
+
+                        </>
+                    )}
+                    </div>
+
+                </div>
+                )}
+            </div>
+            
+            {/* Footer */}
+            <footer className="text-center mt-12 pb-4 text-slate-400 text-sm font-bold flex flex-col items-center gap-1">
+                <span>Powered by Gemini</span>
+                <span>Sophia老師的AI練習本</span>
+            </footer>
+            </div>
+        );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
