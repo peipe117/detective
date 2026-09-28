@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>華語小偵探：生字躲貓貓</title>
+    <title>華語小偵探：生字生詞躲貓貓</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -518,14 +518,19 @@
             while(validWrongs.length < 3) validWrongs.push('?');
             setOptions([activeCustomQuestion.word, ...validWrongs].sort(() => 0.5 - Math.random()));
             } else {
-            let availableWrongs = vocabList.filter(item => item.word !== currentItem.word && item.type === currentItem.type);
+            // 改為從 currentPlayList (當前選擇的課別/範圍) 中挑選干擾選項，避免出現沒學過的字詞
+            let availableWrongs = currentPlayList.filter(item => item.word !== currentItem.word && item.type === currentItem.type);
+            if (availableWrongs.length < 3) {
+                availableWrongs = currentPlayList.filter(item => item.word !== currentItem.word);
+            }
+            // 防呆機制：如果該課的字詞數量真的過少（少於3個），才使用全題庫候補
             if (availableWrongs.length < 3) {
                 availableWrongs = vocabList.filter(item => item.word !== currentItem.word);
             }
             const wrongAnswers = availableWrongs.sort(() => 0.5 - Math.random()).slice(0, 3).map(item => item.word);
             setOptions([currentItem.word, ...wrongAnswers].sort(() => 0.5 - Math.random()));
             }
-        }, [currentItem, activeTab, activeCustomQuestion, vocabList, reshuffleKey]);
+        }, [currentItem, activeTab, activeCustomQuestion, currentPlayList, vocabList, reshuffleKey]);
 
         // 鍵盤快捷鍵
         useEffect(() => {
@@ -766,7 +771,7 @@
                     <SearchIcon className="w-8 h-8 md:w-10 md:h-10 text-blue-500" /> 華語小偵探
                     </h1>
                     <p className="text-slate-500 mt-2 flex items-center justify-center md:justify-start gap-2 font-medium">
-                    生字躲貓貓 
+                    生字生詞躲貓貓 
                     <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm">
                         {activeTab === 'custom' ? '自訂模式' : (activeTab === 'treasure' ? '全課尋寶' : '單題闖關')}
                     </span>
